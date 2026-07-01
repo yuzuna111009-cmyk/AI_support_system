@@ -1,106 +1,39 @@
-
-# Placeholder complete app template.
-# Replace with your full application as needed.
-import streamlit as st
-import pandas as pd
-from openai import OpenAI
-from datetime import date
-import plotly.express as px
-from dotenv import load_dotenv
 import os
+from datetime import date
+import pandas as pd
+import plotly.express as px
+import streamlit as st
+from pandas.errors import EmptyDataError
 
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-st.set_page_config(page_title="AI Student Planner", page_icon="🎓", layout="wide")
+st.set_page_config(page_title="AI Student Planner",page_icon="🎓",layout="wide")
 st.title("🎓 AI Student Planner")
-
-menu = st.sidebar.selectbox(
-    "Menu",
-    ["Dashboard", "Add Schedule", "AI Recommendation", "Reflection"]
-)
-
-if menu == "Dashboard":
-    st.header("Today's Schedule")
-    try:
-        df = pd.read_csv("schedules.csv")
-        if "Time" in df.columns:
-            df["DateTime"] = pd.to_datetime(df["Date"].astype(str) + " " + df["Time"].astype(str))
-            df = df.sort_values("DateTime")
-            st.dataframe(df[["Task","Category","Date","Time"]])
-        else:
-            st.dataframe(df)
-    except Exception as e:
-        st.info(f"No schedule yet. ({e})")
-
-elif menu == "Add Schedule":
-    st.header("Add Schedule")
-    task = st.text_input("Task")
-    category = st.selectbox("Category",
-        ["Class","Assignment","Part-time Job","Club Activity","Job Hunting"])
-    task_date = st.date_input("Date", date.today())
-    task_time = st.time_input("Time")
-
+SCHEDULE_FILE="schedules.csv"; REFLECTION_FILE="reflections.csv"
+def load_csv(path,cols):
+    if not os.path.exists(path): return pd.DataFrame(columns=cols)
+    try: return pd.read_csv(path)
+    except EmptyDataError: return pd.DataFrame(columns=cols)
+menu=st.sidebar.selectbox("Menu",["Dashboard","Add Schedule","AI Recommendation","Reflection"])
+if menu=="Dashboard":
+    df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"])
+    st.dataframe(df) if not df.empty else st.info("No schedule yet.")
+elif menu=="Add Schedule":
+    task=st.text_input("Task"); cat=st.selectbox("Category",["Class","Assignment","Part-time Job","Club Activity","Job Hunting"]); d=st.date_input("Date",date.today()); t=st.time_input("Time")
     if st.button("Save"):
-        new_data = pd.DataFrame({
-            "Task":[task],
-            "Category":[category],
-            "Date":[str(task_date)],
-            "Time":[str(task_time)]
-        })
-        try:
-            old = pd.read_csv("schedules.csv")
-            new_data = pd.concat([old,new_data], ignore_index=True)
-        except FileNotFoundError:
-            pass
-        new_data.to_csv("schedules.csv", index=False)
-        st.success("Saved")
-
-elif menu == "AI Recommendation":
-    st.header("AI Recommendation")
-    try:
-        df = pd.read_csv("schedules.csv")
-        schedule_text = df.to_string(index=False)
-        if st.button("Generate Plan"):
-            prompt = f"""You are a university student planner.
-
-Based on the following schedule:
-
-{schedule_text}
-
-Suggest:
-1. Priority order
-2. Time allocation
-3. Productivity advice
-
-Keep response short.
-"""
-            response = client.chat.completions.create(
-                model="gpt-4.1-mini",
-                messages=[{"role":"user","content":prompt}]
-            )
-            st.write(response.choices[0].message.content)
-    except Exception as e:
-        st.error(f"Error: {e}")
-
-elif menu == "Reflection":
-    st.header("Daily Reflection")
-    satisfaction = st.slider("Satisfaction",1,5)
-    comment = st.text_area("Comment")
-
+        df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"]); df.loc[len(df)]=[task,cat,str(d),str(t),"Not Set"]; df.to_csv(SCHEDULE_FILE,index=False); st.success("Saved")
+elif menu=="AI Recommendation":
+    df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"])
+    if df.empty: st.warning("Please add your schedule first.")
+    else:
+        st.link_button("Open ChatGPT","https://chatgpt.com")
+        prompt=f"""I am a university student.\n\nHere is my schedule:\n\n{df.to_string(index=False)}\n\nPlease prioritize my tasks, create a recommended daily schedule, explain the priorities, and suggest the best start time. Keep it concise."""
+        st.code(prompt)
+        st.text_area("Paste ChatGPT's response here")
+        pr=[]
+        for i,r in df.iterrows(): pr.append(st.selectbox(r["Task"],["High","Medium","Low"],key=str(i)))
+        if st.button("Save Priorities"): df["Priority"]=pr; df.to_csv(SCHEDULE_FILE,index=False); st.success("Saved")
+else:
+    s=st.slider("Satisfaction",1,5); c=st.text_area("Comment")
     if st.button("Submit"):
-        new = pd.DataFrame({"Satisfaction":[satisfaction],"Comment":[comment]})
-        try:
-            old = pd.read_csv("reflections.csv")
-            new = pd.concat([old,new], ignore_index=True)
-        except FileNotFoundError:
-            pass
-        new.to_csv("reflections.csv", index=False)
-        st.success("Saved")
-
-    try:
-        df = pd.read_csv("reflections.csv")
-        fig = px.histogram(df, x="Satisfaction")
-        st.plotly_chart(fig)
-    except FileNotFoundError:
-        pass
+        df=load_csv(REFLECTION_FILE,["Satisfaction","Comment"]); df.loc[len(df)]=[s,c]; df.to_csv(REFLECTION_FILE,index=False)
+    df=load_csv(REFLECTION_FILE,["Satisfaction","Comment"])
+    if not df.empty: st.plotly_chart(px.histogram(df,x="Satisfaction"),use_container_width=True)
