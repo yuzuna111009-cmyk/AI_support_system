@@ -1,39 +1,420 @@
 import os
 from datetime import date
 import pandas as pd
-import plotly.express as px
 import streamlit as st
 from pandas.errors import EmptyDataError
 
-st.set_page_config(page_title="AI Student Planner",page_icon="🎓",layout="wide")
+# -----------------------------
+# Page Setting
+# -----------------------------
+st.set_page_config(
+    page_title="AI Student Planner",
+    page_icon="🎓",
+    layout="wide"
+)
+
 st.title("🎓 AI Student Planner")
-SCHEDULE_FILE="schedules.csv"; REFLECTION_FILE="reflections.csv"
-def load_csv(path,cols):
-    if not os.path.exists(path): return pd.DataFrame(columns=cols)
-    try: return pd.read_csv(path)
-    except EmptyDataError: return pd.DataFrame(columns=cols)
-menu=st.sidebar.selectbox("Menu",["Dashboard","Add Schedule","AI Recommendation","Reflection"])
-if menu=="Dashboard":
-    df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"])
-    st.dataframe(df) if not df.empty else st.info("No schedule yet.")
-elif menu=="Add Schedule":
-    task=st.text_input("Task"); cat=st.selectbox("Category",["Class","Assignment","Part-time Job","Club Activity","Job Hunting"]); d=st.date_input("Date",date.today()); t=st.time_input("Time")
-    if st.button("Save"):
-        df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"]); df.loc[len(df)]=[task,cat,str(d),str(t),"Not Set"]; df.to_csv(SCHEDULE_FILE,index=False); st.success("Saved")
-elif menu=="AI Recommendation":
-    df=load_csv(SCHEDULE_FILE,["Task","Category","Date","Time","Priority"])
-    if df.empty: st.warning("Please add your schedule first.")
+
+# -----------------------------
+# File Names
+# -----------------------------
+SCHEDULE_FILE = "schedules.csv"
+REFLECTION_FILE = "reflections.csv"
+
+# -----------------------------
+# Create Schedule File
+# -----------------------------
+def load_schedule():
+
+    columns = [
+        "Task",
+        "Category",
+        "Date",
+        "Time",
+        "Priority"
+    ]
+
+    if not os.path.exists(SCHEDULE_FILE):
+
+        df = pd.DataFrame(columns=columns)
+
+        df.to_csv(
+            SCHEDULE_FILE,
+            index=False
+        )
+
+        return df
+
+    try:
+
+        df = pd.read_csv(SCHEDULE_FILE)
+
+    except EmptyDataError:
+
+        df = pd.DataFrame(columns=columns)
+
+    # 古いCSVでも列を追加
+    for col in columns:
+
+        if col not in df.columns:
+
+            df[col] = ""
+
+    return df[columns]
+
+# -----------------------------
+# Create Reflection File
+# -----------------------------
+def load_reflection():
+
+    columns = [
+        "Satisfaction",
+        "Comment"
+    ]
+
+    if not os.path.exists(REFLECTION_FILE):
+
+        df = pd.DataFrame(columns=columns)
+
+        df.to_csv(
+            REFLECTION_FILE,
+            index=False
+        )
+
+        return df
+
+    try:
+
+        df = pd.read_csv(REFLECTION_FILE)
+
+    except EmptyDataError:
+
+        df = pd.DataFrame(columns=columns)
+
+    return df
+
+# -----------------------------
+# Sidebar
+# -----------------------------
+menu = st.sidebar.selectbox(
+
+    "Menu",
+
+    [
+        "Dashboard",
+        "Add Schedule",
+        "AI Recommendation",
+        "Reflection"
+    ]
+
+)
+
+# ==================================================
+# Dashboard
+# ==================================================
+
+if menu == "Dashboard":
+
+    st.header("📅 Today's Schedule")
+
+    df = load_schedule()
+
+    if df.empty:
+
+        st.info("No schedule yet.")
+
     else:
-        st.link_button("Open ChatGPT","https://chatgpt.com")
-        prompt=f"""I am a university student.\n\nHere is my schedule:\n\n{df.to_string(index=False)}\n\nPlease prioritize my tasks, create a recommended daily schedule, explain the priorities, and suggest the best start time. Keep it concise."""
-        st.code(prompt)
-        st.text_area("Paste ChatGPT's response here")
-        pr=[]
-        for i,r in df.iterrows(): pr.append(st.selectbox(r["Task"],["High","Medium","Low"],key=str(i)))
-        if st.button("Save Priorities"): df["Priority"]=pr; df.to_csv(SCHEDULE_FILE,index=False); st.success("Saved")
-else:
-    s=st.slider("Satisfaction",1,5); c=st.text_area("Comment")
+
+        try:
+
+            df["DateTime"] = pd.to_datetime(
+                df["Date"].astype(str)
+                + " "
+                + df["Time"].astype(str)
+            )
+
+            df = df.sort_values("DateTime")
+
+        except:
+
+            pass
+
+        st.dataframe(
+
+            df[
+                [
+                    "Task",
+                    "Category",
+                    "Date",
+                    "Time",
+                    "Priority"
+                ]
+            ],
+
+            use_container_width=True
+
+        )
+
+# ==================================================
+# Add Schedule
+# ==================================================
+
+elif menu == "Add Schedule":
+
+    st.header("➕ Add Schedule")
+
+    task = st.text_input(
+        "Task"
+    )
+
+    category = st.selectbox(
+
+        "Category",
+
+        [
+            "Class",
+            "Assignment",
+            "Part-time Job",
+            "Club Activity",
+            "Job Hunting"
+        ]
+
+    )
+
+    task_date = st.date_input(
+
+        "Date",
+
+        date.today()
+
+    )
+
+    task_time = st.time_input(
+
+        "Time"
+
+    )
+
+    if st.button("Save"):
+
+        df = load_schedule()
+
+        new_row = pd.DataFrame({
+
+            "Task":[task],
+
+            "Category":[category],
+
+            "Date":[str(task_date)],
+
+            "Time":[str(task_time)],
+
+            "Priority":["Not Set"]
+
+        })
+
+        df = pd.concat(
+
+            [
+                df,
+                new_row
+            ],
+
+            ignore_index=True
+
+        )
+
+        df.to_csv(
+
+            SCHEDULE_FILE,
+
+            index=False
+
+        )
+
+        st.success("Schedule Saved!")
+        # ==================================================
+# AI Recommendation
+# ==================================================
+
+elif menu == "AI Recommendation":
+
+    st.header("🤖 AI Recommendation")
+
+    df = load_schedule()
+
+    if df.empty:
+
+        st.warning("Please add your schedule first.")
+
+    else:
+
+        st.write("""
+This feature uses ChatGPT to help you organize your schedule.
+
+### How to use
+
+1. Click **Open ChatGPT**
+2. Copy the prompt below.
+3. Paste it into ChatGPT.
+4. Copy the AI's recommendation.
+5. Set the priority of each task below.
+""")
+
+        st.link_button(
+            "🚀 Open ChatGPT",
+            "https://chatgpt.com"
+        )
+
+        prompt = f"""
+I am a university student.
+
+Here is my schedule.
+
+{df[['Task','Category','Date','Time']].to_string(index=False)}
+
+Please:
+
+1. Prioritize all tasks.
+2. Create an optimized daily schedule.
+3. Suggest the best starting time.
+4. Explain why each task has that priority.
+5. Give advice to improve productivity.
+
+Please answer in a simple table.
+"""
+
+        st.subheader("📋 Copy this Prompt")
+
+        st.code(
+            prompt,
+            language="text"
+        )
+
+        ai_answer = st.text_area(
+            "📄 Paste ChatGPT's Recommendation Here",
+            height=220
+        )
+
+        st.divider()
+
+        st.subheader("⭐ Task Priority")
+
+        priority_list = []
+
+        options = [
+            "⭐⭐⭐ High",
+            "⭐⭐ Medium",
+            "⭐ Low"
+        ]
+
+        for i, row in df.iterrows():
+
+            priority = st.selectbox(
+
+                row["Task"],
+
+                options,
+
+                index=1,
+
+                key=f"priority_{i}"
+
+            )
+
+            priority_list.append(priority)
+
+        if st.button("💾 Save Priority"):
+
+            df["Priority"] = priority_list
+
+            df.to_csv(
+                SCHEDULE_FILE,
+                index=False
+            )
+
+            st.success("Priority Saved!")
+
+# ==================================================
+# Reflection
+# ==================================================
+
+elif menu == "Reflection":
+
+    st.header("📝 Daily Reflection")
+
+    satisfaction = st.slider(
+
+        "Satisfaction",
+
+        1,
+
+        5
+
+    )
+
+    comment = st.text_area(
+
+        "Comment"
+
+    )
+
     if st.button("Submit"):
-        df=load_csv(REFLECTION_FILE,["Satisfaction","Comment"]); df.loc[len(df)]=[s,c]; df.to_csv(REFLECTION_FILE,index=False)
-    df=load_csv(REFLECTION_FILE,["Satisfaction","Comment"])
-    if not df.empty: st.plotly_chart(px.histogram(df,x="Satisfaction"),use_container_width=True)
+
+        df = load_reflection()
+
+        new_row = pd.DataFrame({
+
+            "Satisfaction":[satisfaction],
+
+            "Comment":[comment]
+
+        })
+
+        df = pd.concat(
+
+            [
+
+                df,
+
+                new_row
+
+            ],
+
+            ignore_index=True
+
+        )
+
+        df.to_csv(
+
+            REFLECTION_FILE,
+
+            index=False
+
+        )
+
+        st.success("Reflection Saved!")
+
+    df = load_reflection()
+
+    if not df.empty:
+
+        import plotly.express as px
+
+        fig = px.histogram(
+
+            df,
+
+            x="Satisfaction",
+
+            title="Satisfaction Distribution"
+
+        )
+
+        st.plotly_chart(
+
+            fig,
+
+            use_container_width=True
+
+        )
